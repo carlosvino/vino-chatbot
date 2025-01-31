@@ -28,12 +28,12 @@ def chatbot():
             ]
         )
 
-        chatbot_reply = response['choices'][0]['message']['content']  # ✅ New API structure
+        # ✅ Fix: The new API structure requires indexing with dictionary keys
+        chatbot_reply = response["choices"][0]["message"]["content"]
+
         return jsonify({"response": chatbot_reply})
 
-    except openai.OpenAIError as e:  # ✅ Fix error handling
-        return jsonify({"error": f"OpenAI API Error: {str(e)}"}), 500
-    except Exception as e:
+    except Exception as e:  # ✅ Generic error handling for now
         return jsonify({"error": f"Server Error: {str(e)}"}), 500
 
 if __name__ == "__main__":
