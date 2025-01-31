@@ -15,10 +15,31 @@ client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # ✅ Load Google Sheets credentials from environment variable
 creds_json = os.getenv("GOOGLE_CREDENTIALS")  # Load from Render env variable
 creds_dict = json.loads(creds_json)  # Convert JSON string to dictionary
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"]
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.file"
+]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 gs_client = gspread.authorize(creds)
-sheet = gs_client.open("VinoBot Leads").sheet1  # Open the first sheet
+
+# ✅ Debugging: Print all accessible spreadsheets
+try:
+    spreadsheets = gs_client.openall()
+    available_sheets = [s.title for s in spreadsheets]
+    print(f"✅ Available Spreadsheets: {available_sheets}")  # Logs available sheets
+    if "VinoBot Leads" not in available_sheets:
+        print("❌ ERROR: 'VinoBot Leads' NOT FOUND. Check sharing settings.")
+except Exception as e:
+    print(f"❌ ERROR: Unable to list available spreadsheets: {e}")
+
+# ✅ Try to open the sheet safely
+try:
+    sheet = gs_client.open("VinoBot Leads").sheet1  # Open the first sheet
+    print("✅ Successfully connected to 'VinoBot Leads'")
+except gspread.exceptions.SpreadsheetNotFound:
+    print("❌ ERROR: Spreadsheet 'VinoBot Leads' NOT FOUND. Check service account access.")
+    sheet = None  # Prevents errors if the sheet isn't found
 
 @app.route("/", methods=["GET"])
 def home():
@@ -45,14 +66,20 @@ def chatbot():
 
         chatbot_reply = response.choices[0].message.content
 
-        # ✅ Save the lead to Google Sheets
-        sheet.append_row([user_name, user_email, user_input, chatbot_reply])
+        # ✅ Save the lead to Google Sheets if available
+        if sheet:
+            sheet.append_row([user_name, user_email, user_input, chatbot_reply])
+            print(f"✅ Lead saved: {user_name}, {user_email}, {user_input}")
+        else:
+            print("❌ ERROR: Google Sheet not available. Lead not saved.")
 
         return jsonify({"response": chatbot_reply})
 
     except openai.OpenAIError as e:
+        print(f"❌ OpenAI API Error: {e}")
         return jsonify({"error": f"OpenAI API Error: {str(e)}"}), 500
     except Exception as e:
+        print(f"❌ Server Error: {e}")
         return jsonify({"error": f"Server Error: {str(e)}"}), 500
 
 if __name__ == "__main__":
