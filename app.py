@@ -9,10 +9,10 @@ from oauth2client.service_account import ServiceAccountCredentials
 app = Flask(__name__)
 CORS(app)
 
-# ✅ Correct way to set OpenAI API key
+# ✅ Correct OpenAI API Key
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ✅ Load Google Sheets credentials from environment variable
+# ✅ Load Google Sheets credentials
 creds_json = os.getenv("GOOGLE_CREDENTIALS")  # Load from Render env variable
 creds_dict = json.loads(creds_json)  # Convert JSON string to dictionary
 scope = [
@@ -23,7 +23,7 @@ scope = [
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 gs_client = gspread.authorize(creds)
 
-# ✅ Debugging: Print all accessible spreadsheets
+# ✅ Debugging: Print available spreadsheets to log
 try:
     spreadsheets = gs_client.openall()
     available_sheets = [s.title for s in spreadsheets]
@@ -39,7 +39,7 @@ try:
     print("✅ Successfully connected to 'VinoBot Leads'")
 except gspread.exceptions.SpreadsheetNotFound:
     print("❌ ERROR: Spreadsheet 'VinoBot Leads' NOT FOUND. Check service account access.")
-    sheet = None  # Prevents errors if the sheet isn't found
+    sheet = None  # Prevents app from crashing
 
 @app.route("/", methods=["GET"])
 def home():
@@ -49,24 +49,36 @@ def home():
 def chatbot():
     try:
         user_input = request.json.get("message")
-        user_email = request.json.get("email", "Not provided")  # Optional email input
-        user_name = request.json.get("name", "Not provided")  # Optional name input
+        user_email = request.json.get("email", "").strip()
+        user_name = request.json.get("name", "").strip()
 
         if not user_input:
             return jsonify({"error": "No message provided"}), 400
 
-        # ✅ Update to new OpenAI SDK syntax
+        # ✅ Force Lead Capture First
+        if not user_name or not user_email:
+            return jsonify({"response": "Before we proceed, can you provide your **name** and **email**? This will help us assist you better!"})
+
+        # ✅ Updated System Prompt to Force Lead Capture
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are an AI chatbot for Vino Design Build, helping users with remodeling, ADUs, and construction inquiries."},
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an AI chatbot for Vino Design Build. "
+                        "Your primary goal is to collect the user's name, email, and project details "
+                        "BEFORE answering in full. If the user hasn't provided this info, ask for it first. "
+                        "Once provided, help them with remodeling, ADUs, and construction inquiries."
+                    )
+                },
                 {"role": "user", "content": user_input}
             ]
         )
 
         chatbot_reply = response.choices[0].message.content
 
-        # ✅ Save the lead to Google Sheets if available
+        # ✅ Save to Google Sheets if available
         if sheet:
             sheet.append_row([user_name, user_email, user_input, chatbot_reply])
             print(f"✅ Lead saved: {user_name}, {user_email}, {user_input}")
