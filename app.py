@@ -48,30 +48,29 @@ def home():
 @app.route("/chatbot", methods=["POST"])
 def chatbot():
     try:
-        user_input = request.json.get("message")
+        user_input = request.json.get("message", "").strip().lower()
         user_email = request.json.get("email", "").strip()
         user_name = request.json.get("name", "").strip()
 
         if not user_input:
             return jsonify({"error": "No message provided"}), 400
 
-        # ✅ Force Lead Capture First
+        # ✅ Detect if user provided name & email, only ask if missing
         if not user_name or not user_email:
             return jsonify({"response": "Before we proceed, can you provide your **name** and **email**? This will help us assist you better!"})
 
-        # ✅ Updated System Prompt to Force Lead Capture
+        # ✅ Updated System Prompt to Ensure Lead Capture Happens Only Once
+        system_prompt = (
+            "You are an AI chatbot for Vino Design Build. "
+            "Your primary goal is to collect the user's name, email, and project details "
+            "BEFORE answering in full. If the user hasn't provided this info, ask for it first. "
+            "If they have provided this info, proceed with answering their questions."
+        )
+
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an AI chatbot for Vino Design Build. "
-                        "Your primary goal is to collect the user's name, email, and project details "
-                        "BEFORE answering in full. If the user hasn't provided this info, ask for it first. "
-                        "Once provided, help them with remodeling, ADUs, and construction inquiries."
-                    )
-                },
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_input}
             ]
         )
