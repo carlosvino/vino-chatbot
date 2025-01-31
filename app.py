@@ -1,5 +1,6 @@
 import json
 import os
+import re  # ✅ Import regex for better email/name extraction
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
@@ -41,6 +42,10 @@ except gspread.exceptions.SpreadsheetNotFound:
     print("❌ ERROR: Spreadsheet 'VinoBot Leads' NOT FOUND. Check service account access.")
     sheet = None  # Prevents app from crashing
 
+# ✅ Regex for extracting name and email
+EMAIL_REGEX = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+NAME_REGEX = r"^\s*([A-Za-z]+)\s"
+
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({"message": "Vino Chatbot API is running!"})
@@ -48,16 +53,24 @@ def home():
 @app.route("/chatbot", methods=["POST"])
 def chatbot():
     try:
-        user_input = request.json.get("message", "").strip().lower()
+        user_input = request.json.get("message", "").strip()
         user_email = request.json.get("email", "").strip()
         user_name = request.json.get("name", "").strip()
 
-        if not user_input:
-            return jsonify({"error": "No message provided"}), 400
+        # ✅ Extract email and name if they were included in the input message
+        if not user_email:
+            extracted_email = re.search(EMAIL_REGEX, user_input)
+            if extracted_email:
+                user_email = extracted_email.group(0)
 
-        # ✅ Detect if user provided name & email, only ask if missing
+        if not user_name:
+            extracted_name = re.search(NAME_REGEX, user_input)
+            if extracted_name:
+                user_name = extracted_name.group(1)
+
+        # ✅ Ask for missing info only if needed
         if not user_name or not user_email:
-            return jsonify({"response": "Before we proceed, can you provide your **name** and **email**? This will help us assist you better!"})
+            return jsonify({"response": "Before we proceed, can you provide your **name** and **email**? Example: 'My name is John and my email is john@example.com'."})
 
         # ✅ Updated System Prompt to Ensure Lead Capture Happens Only Once
         system_prompt = (
