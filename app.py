@@ -1,7 +1,8 @@
+import json
+import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
-import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -11,9 +12,11 @@ CORS(app)
 # ✅ Correct way to set OpenAI API key
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ✅ Google Sheets Authentication
+# ✅ Load Google Sheets credentials from environment variable
+creds_json = os.getenv("GOOGLE_CREDENTIALS")  # Load from Render env variable
+creds_dict = json.loads(creds_json)  # Convert JSON string to dictionary
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("vino-chatbot-key.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 gs_client = gspread.authorize(creds)
 sheet = gs_client.open("Vino Leads").sheet1  # Open the first sheet
 
