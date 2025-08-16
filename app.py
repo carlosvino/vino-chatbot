@@ -1,6 +1,8 @@
 import json
 import os
 import re  # ✅ Import regex for better email/name extraction
+import uuid
+from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
@@ -9,6 +11,17 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 app = Flask(__name__)
 CORS(app)
+
+# In-memory conversation store for advanced contextual chats
+conversations = {}
+
+
+@app.before_request
+def log_request():
+    """Log basic request information for debugging and analytics."""
+    app.logger.info(
+        f"{datetime.utcnow().isoformat()} | {request.remote_addr} | {request.method} {request.path}"
+    )
 
 # ✅ Correct OpenAI API Key
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -57,6 +70,9 @@ def chatbot():
         user_email = request.json.get("email", "").strip()
         user_name = request.json.get("name", "").strip()
 
+        session_id = request.json.get("session_id") or user_email or str(uuid.uuid4())
+        history = conversations.setdefault(session_id, [])
+
         # ✅ Extract email and name if they were included in the input message
         if not user_email:
             extracted_email = re.search(EMAIL_REGEX, user_input)
@@ -80,15 +96,18 @@ def chatbot():
             "If they have provided this info, proceed with answering their questions."
         )
 
+        history.append({"role": "user", "content": user_input})
+        messages = [{"role": "system", "content": system_prompt}] + history
+
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input}
-            ]
+            messages=messages
         )
 
         chatbot_reply = response.choices[0].message.content
+        history.append({"role": "assistant", "content": chatbot_reply})
+        if len(history) > 10:
+            conversations[session_id] = history[-10:]
 
         # ✅ Save to Google Sheets if available
         if sheet:
@@ -97,7 +116,7 @@ def chatbot():
         else:
             print("❌ ERROR: Google Sheet not available. Lead not saved.")
 
-        return jsonify({"response": chatbot_reply})
+        return jsonify({"response": chatbot_reply, "session_id": session_id})
 
     except openai.OpenAIError as e:
         print(f"❌ OpenAI API Error: {e}")
@@ -105,6 +124,15 @@ def chatbot():
     except Exception as e:
         print(f"❌ Server Error: {e}")
         return jsonify({"error": f"Server Error: {str(e)}"}), 500
+
+@app.route("/reset", methods=["POST"])
+def reset_session():
+    """Reset conversation history for a given session."""
+    session_id = request.json.get("session_id")
+    if session_id and session_id in conversations:
+        del conversations[session_id]
+        return jsonify({"status": "reset"})
+    return jsonify({"error": "session_id not found"}), 404
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
