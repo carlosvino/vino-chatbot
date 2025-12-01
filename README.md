@@ -61,3 +61,7 @@ titan-si/
 ## Testing
 
 The `tests/` folder is ready for Pytest-based tests. Add new test modules as features are implemented.
+
+## Architecture
+
+See [docs/titan_si_integration_architecture.md](docs/titan_si_integration_architecture.md) for the high-level integration architecture and MVP build plan.
