@@ -1,6 +1,9 @@
-flask
-flask_cors
+fastapi
+uvicorn[standard]
+sqlalchemy
+alembic
+pydantic
 openai
-gunicorn
-gspread
-oauth2client
+python-dotenv
+pytest
+pydantic-settings
